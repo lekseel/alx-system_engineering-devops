@@ -1,3 +1,4 @@
+#!/bin/bash
 [Got]
 
 (0 chars long)
