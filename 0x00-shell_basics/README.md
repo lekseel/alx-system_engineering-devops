@@ -1,1 +1,2 @@
-/alx-system_engineering-devops/correction/7849033272306590516219344180467273709487_5/205/147311/0x00-shell_basics
+#!/bin/bash
+pwd
