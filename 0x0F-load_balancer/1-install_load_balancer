@@ -1,90 +1,54 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Installs, configures, and starts the load balancer
+sudo apt-get update
+sudo apt-get -y install --no-install-recommends software-properties-common
+sudo add-apt-repository -y ppa:vbernat/haproxy-2.4
+sudo apt-get -y install haproxy
 
-# Install HAproxy
-apt-get update
-apt-get install -y haproxy
+# the load balancer's configuration
+DOMAIN_NAME='beta-scribbles.tech'
+INIT_FILE='/etc/default/haproxy'
+CONFIG_FILE='/etc/haproxy/haproxy.cfg'
+HAPROXY_LB_CONFIG=\
+"
+#--$DOMAIN_NAME-params-begin--
+backend $DOMAIN_NAME-backend
+	balance roundrobin
+	server 914-web-01 34.138.32.248:80 check
+	server 914-web-02 3.226.74.205:80 check
+frontend $DOMAIN_NAME-frontend
+	bind *:80
+	mode http
+	default_backend $DOMAIN_NAME-backend
+#--$DOMAIN_NAME-params-end--
+"
 
-# Configure HAproxy
-cat <<EOF > /etc/haproxy/haproxy.cfg
-defaults
-    mode http
-    timeout connect 5000ms
-    timeout client 50000ms
-    timeout server 50000ms
+[ -f "$INIT_FILE" ] || touch "$INIT_FILE"
+[ -f "$CONFIG_FILE" ] || touch "$CONFIG_FILE"
 
-frontend http-in
-    bind *:80
-    default_backend servers
+CONFIG_WORDS=$(grep -Eco "$DOMAIN_NAME-backend" < $CONFIG_FILE)
 
-backend servers
-    mode http
-    balance roundrobin
-    server web-01 [STUDENT_ID]-web-01:80 check
-    server web-02 [STUDENT_ID]-web-02:80 check
-EOF
+if [ "$(grep -Eco '^ENABLED=[01]$' < $INIT_FILE)" -gt 0 ]; then
+	sed -i 's/^ENABLED=0$/ENABLED=1/' "$INIT_FILE"
+else
+	echo 'ENABLED=1' >> $INIT_FILE
+fi
 
-# Set up init script for HAproxy
-cat <<EOF > /etc/init.d/haproxy
-#!/bin/sh
-### BEGIN INIT INFO
-# Provides:          haproxy
-# Required-Start:    \$local_fs \$network \$syslog
-# Required-Stop:     \$local_fs \$network \$syslog
-# Default-Start:     2 3 4 5
-# Default-Stop:      0 1 6
-# Short-Description: HAproxy init script
-# Description:       HAproxy init script
-### END INIT INFO
+if [ "$CONFIG_WORDS" -eq 0 ]; then
+	echo -e "$HAPROXY_LB_CONFIG" >> $CONFIG_FILE
+else
+	start_tkn="#--$DOMAIN_NAME-params-begin--"
+	end_tkn="#--$DOMAIN_NAME-params-end--"
+	a=$(grep -onE "$start_tkn" < "$CONFIG_FILE" | cut -d : -f1)
+	b=$(grep -onE "$end_tkn" < "$CONFIG_FILE" | cut -d : -f1)
+	a=$((a - 1))
+	b=$((b + 1))
+	sed -i "$a,$b"d "$CONFIG_FILE"
+	echo -en "$HAPROXY_LB_CONFIG" >> $CONFIG_FILE
+fi
 
-PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-DAEMON=/usr/sbin/haproxy
-CONFIG=/etc/haproxy/haproxy.cfg
-PIDFILE=/var/run/haproxy.pid
-
-test -x \$DAEMON || exit 0
-
-. /lib/lsb/init-functions
-
-start() {
-    \$DAEMON -f \$CONFIG -D -p \$PIDFILE
-    sleep 2
-    status
-}
-
-stop() {
-    \$DAEMON -f \$CONFIG -D -p \$PIDFILE -sf \$(cat \$PIDFILE)
-    rm -f \$PIDFILE
-}
-
-status() {
-    status_of_proc -p \$PIDFILE \$DAEMON haproxy && exit 0 || exit \$?
-}
-
-case "\$1" in
-    start)
-        start
-        ;;
-    stop)
-        stop
-        ;;
-    reload|force-reload|restart)
-        stop
-        start
-        ;;
-    status)
-        status
-        ;;
-    *)
-        echo "Usage: /etc/init.d/haproxy {start|stop|reload|restart|status}"
-        exit 1
-        ;;
-esac
-
-exit 0
-EOF
-
-chmod +x /etc/init.d/haproxy
-update-rc.d haproxy defaults
-
-# Start HAproxy
-service haproxy start
+if [ "$(pgrep -c haproxy)" -le 0 ]; then
+	service haproxy start
+else
+	service haproxy restart
+fi
