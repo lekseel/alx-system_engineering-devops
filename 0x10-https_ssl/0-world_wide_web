@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# A Script that displays information and subdomains
+
+print_info() {
+    domain="$1"
+    subdomain="$2"
+
+    if [ -z "$subdomain" ]; then
+        subdomains=(www lb-01 web-01 web-02)
+    else
+        subdomains=("$subdomain")
+    fi
+
+    for sub in "${subdomains[@]}"; do
+        output=$(nslookup -type=A "$sub.$domain" | awk '/^Name:/ {print $2} /^Address:/ {print $2}')
+        echo "The subdomain $sub is a A record and points to $output"
+    done
+}
+
+if [ $# -eq 1 ]; then
+    domain="$1"
+    print_info "$domain"
+elif [ $# -eq 2 ]; then
+    domain="$1"
+    subdomain="$2"
+    print_info "$domain" "$subdomain"
+else
+    echo "Usage: $0 <domain> [subdomain]"
+    exit 1
+fi
