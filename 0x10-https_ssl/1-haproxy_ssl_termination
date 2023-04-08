@@ -37,4 +37,4 @@ frontend https
 default_backend www-backend
 backend www-backend
     mode http
-    server web-server1 18.235.248.180
+    server web-server1 54.146.79.137
